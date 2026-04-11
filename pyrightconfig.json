@@ -1,0 +1,7 @@
+{
+  "venvPath": "c:/Users/patle/OneDrive/Documents/Desktop/Face-recognoition_system",
+  "venv": ".venv",
+  "extraPaths": [
+    ".venv/Lib/site-packages"
+  ]
+}
