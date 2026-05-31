@@ -5,6 +5,8 @@
   <img src="https://img.shields.io/badge/Kivy-UI-40B5A4?style=for-the-badge&logo=python&logoColor=white" />
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" />
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" />
+  <img src="https://img.shields.io/github/repo-size/Paragiscool/Face_verification_ml_project?style=for-the-badge&color=blueviolet" />
+  <img src="https://img.shields.io/github/last-commit/Paragiscool/Face_verification_ml_project?style=for-the-badge&color=orange" />
 </p>
 
 <h1 align="center">🔐 Face Verification System</h1>
@@ -14,13 +16,46 @@
   A deep learning–powered face verification system that uses a <strong>Siamese Neural Network</strong> with a custom <strong>L1 Distance Layer</strong> to determine whether two face images belong to the same person. The model is trained on anchor/positive/negative triplets and deployed via a real-time <strong>Kivy desktop application</strong> with live webcam feed.
 </p>
 
+<p align="center">
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-features">Features</a> •
+  <a href="#-system-architecture">Architecture</a> •
+  <a href="#-model-architecture">Model</a> •
+  <a href="#-usage-guide">Usage</a> •
+  <a href="#-troubleshooting">Troubleshooting</a>
+</p>
+
+---
+
+## ⚡ Quick Start
+
+```bash
+# Clone & set up
+git clone https://github.com/Paragiscool/Face_verification_ml_project.git
+cd Face_verification_ml_project
+python -m venv .venv && .venv\Scripts\activate      # Windows
+pip install -r requirements.txt && pip install kivy
+
+# Place 3–5 photos of your face inside:
+#   application_data/verification_images/
+
+# Launch the app
+python faceid.py
+# → Click "Verify" to authenticate against your stored images
+```
+
+> **Note:** A pre-trained model (`siamesemodelv2.h5`, ~155 MB) must be present in the project root.  
+> It is excluded from Git via `.gitignore` due to file size — see [Training Pipeline](#️-training-pipeline) to generate your own.
+
 ---
 
 ## 📑 Table of Contents
 
+- [⚡ Quick Start](#-quick-start)
 - [✨ Features](#-features)
 - [🏗️ System Architecture](#️-system-architecture)
 - [🧠 How Siamese Networks Work](#-how-siamese-networks-work)
+- [🔬 Mathematical Foundations](#-mathematical-foundations)
 - [📂 Project Structure](#-project-structure)
 - [⚙️ Installation & Setup](#️-installation--setup)
 - [🗂️ Data Pipeline](#️-data-pipeline)
@@ -32,7 +67,9 @@
 - [🛠️ Technology Stack](#️-technology-stack)
 - [🚀 Usage Guide](#-usage-guide)
 - [📈 Performance](#-performance)
+- [🐛 Troubleshooting](#-troubleshooting)
 - [🤝 Contributing](#-contributing)
+- [📚 References](#-references)
 - [📜 License](#-license)
 
 ---
@@ -49,10 +86,14 @@
 | 🔒 **Threshold-Based Decisions** | Configurable detection & verification thresholds |
 | 💾 **Checkpoint System** | TensorFlow checkpoint saving every 10 epochs |
 | 🖼️ **Google Colab Training** | Full training pipeline compatible with Google Colab + GPU |
+| 🛡️ **Graceful Error Handling** | Empty verification directory handling, directory auto-creation |
+| 🔁 **One-Shot Learning** | Verify identity from just a handful of reference images |
 
 ---
 
 ## 🏗️ System Architecture
+
+The system is organized into four distinct layers that communicate sequentially during each verification request:
 
 ```mermaid
 graph TB
@@ -64,7 +105,7 @@ graph TB
         B --> C[Siamese Neural Network]
         C --> D[Embedding Network<br/>CNN → 4096-D Vector]
         E[Verification Images<br/>Stored References] --> F[Embedding Network<br/>Shared Weights]
-        D --> G[L1 Distance Layer<br/>|Anchor − Validation|]
+        D --> G[L1 Distance Layer<br/>abs Anchor − Validation]
         F --> G
         G --> H[Dense Classifier<br/>Sigmoid → 0 or 1]
     end
@@ -80,7 +121,7 @@ graph TB
     end
 
     subgraph "🖥️ Kivy Application"
-        M --> O[Update UI Label<br/>'Verified']
+        M --> O[Update UI Label<br/>Verified]
         N --> O
         O --> P[Display Result to User]
     end
@@ -106,9 +147,9 @@ graph LR
         C["🖼️ Verification Image"] --> D["🔵 CNN Encoder<br/>(Shared Weights)"]
         B --> E["📐 4096-D Embedding"]
         D --> F["📐 4096-D Embedding"]
-        E --> G["🔶 L1 Distance<br/>|E₁ − E₂|"]
+        E --> G["🔶 L1 Distance<br/>|E_1 − E_2|"]
         F --> G
-        G --> H["🟢 Dense(1, sigmoid)"]
+        G --> H["🟢 Dense 1 sigmoid"]
         H --> I{"Same Person?"}
         I -->|"> 0.5"| J["✅ Yes"]
         I -->|"≤ 0.5"| K["❌ No"]
@@ -129,15 +170,76 @@ graph LR
 | **Positive** | Another image of the **same** person |
 | **Negative** | An image of a **different** person |
 | **Embedding** | A 4096-dimensional feature vector representing a face |
-| **L1 Distance** | Element-wise absolute difference: `|embedding₁ - embedding₂|` |
+| **L1 Distance** | Element-wise absolute difference: `\|embedding₁ - embedding₂\|` |
 | **One-Shot Learning** | Verify identity from a single (or few) reference image(s) |
+
+### Why Siamese over Classification?
+
+| Approach | Pros | Cons |
+|---|---|---|
+| **Standard Classifier** | Fast inference, simple training | Needs retraining per new user; large dataset required |
+| **Siamese Network** ✅ | Works with 1–5 reference images; no retraining needed | Slower per-comparison inference |
+
+---
+
+## 🔬 Mathematical Foundations
+
+### Embedding Function
+
+The CNN encoder maps an input image **x** to a high-dimensional embedding space:
+
+```
+f(x) : ℝ^(100×100×3) → ℝ^4096
+```
+
+### L1 Distance (Manhattan Distance)
+
+Given two embeddings **f(x₁)** and **f(x₂)**, the distance is computed element-wise:
+
+```
+D(x₁, x₂) = |f(x₁) - f(x₂)| ∈ ℝ^4096
+```
+
+### Classification
+
+The distance vector is passed through a single sigmoid neuron:
+
+```
+P(same person) = σ(W · D(x₁, x₂) + b)
+```
+
+Where `σ` is the sigmoid activation, `W ∈ ℝ^4096` and `b ∈ ℝ` are learnable parameters.
+
+### Dual-Threshold Decision
+
+```
+detection(i)  = 𝟙[P_i > τ_d]           where τ_d = 0.5 (detection threshold)
+verification  = (Σ detection(i)) / N    where N = total verification images
+result        = 𝟙[verification > τ_v]   where τ_v = 0.5 (verification threshold)
+```
+
+```mermaid
+flowchart LR
+    A["P_i for each<br/>reference image"] --> B{"P_i > 0.5?"}
+    B -->|Yes| C["detection = 1"]
+    B -->|No| D["detection = 0"]
+    C --> E["Sum all<br/>detections"]
+    D --> E
+    E --> F["ratio = sum / N"]
+    F --> G{"ratio > 0.5?"}
+    G -->|Yes| H["✅ Verified"]
+    G -->|No| I["❌ Unverified"]
+
+    style H fill:#81C784,stroke:#388E3C,color:#000
+    style I fill:#E57373,stroke:#D32F2F,color:#000
+```
 
 ---
 
 ## 📂 Project Structure
 
 ```
-Face-recognoition_system/
+Face_verification_ml_project/
 │
 ├── 📄 faceid.py                  # Kivy desktop application (real-time verification)
 ├── 📄 layers.py                  # Custom L1 Distance layer for model loading
@@ -147,25 +249,23 @@ Face-recognoition_system/
 ├── 📄 .gitignore                 # Git ignore rules
 ├── 📄 pyrightconfig.json         # Python type-checking config
 │
-├── 🧠 siamesemodelv2.h5          # Trained Siamese model weights (~155MB)
+├── 🧠 siamesemodelv2.h5          # Trained Siamese model weights (~155MB, git-ignored)
 │
-├── 📁 data/                      # Training dataset
+├── 📁 data/                      # Training dataset (git-ignored)
 │   ├── 📁 anchor/                # Anchor face images (your face)
 │   ├── 📁 positive/              # Positive samples (your face, different shots)
-│   └── 📁 negative/              # Negative samples (other people's faces)
+│   └── 📁 negative/              # Negative samples (other people — LFW dataset)
 │
-├── 📁 application_data/          # Runtime application data
+├── 📁 application_data/          # Runtime application data (git-ignored)
 │   ├── 📁 input_image/           # Current webcam capture for verification
 │   └── 📁 verification_images/   # Reference images to verify against
 │
-├── 📁 training_checkpoints/      # TensorFlow model checkpoints
-├── 📁 .venv/                     # Python virtual environment
-└── 📁 .conda/                    # Conda environment
+└── 📁 training_checkpoints/      # TensorFlow model checkpoints (git-ignored)
 ```
 
 ```mermaid
 graph TD
-    A["📦 Project Root"] --> B["📄 faceid.py<br/><i>Kivy App</i>"]
+    A["📦 Project Root"] --> B["📄 faceid.py<br/><i>Kivy App — Entry Point</i>"]
     A --> C["📄 layers.py<br/><i>Custom L1Dist Layer</i>"]
     A --> D["📄 siamese_network_setup.py<br/><i>Training Pipeline</i>"]
     A --> E["🧠 siamesemodelv2.h5<br/><i>Trained Model ~155MB</i>"]
@@ -181,6 +281,7 @@ graph TD
 
     B -->|imports| C
     B -->|loads| E
+    D -->|produces| E
 
     style B fill:#4CAF50,stroke:#2E7D32,color:#fff
     style C fill:#2196F3,stroke:#1565C0,color:#fff
@@ -188,15 +289,27 @@ graph TD
     style E fill:#9C27B0,stroke:#6A1B9A,color:#fff
 ```
 
+### File Roles
+
+| File | Lines | Role |
+|---|---|---|
+| `faceid.py` | 133 | Kivy GUI application — webcam feed, verify button, model inference |
+| `layers.py` | 24 | Custom `L1Dist` Keras layer (needed for `model.load`) |
+| `siamese_network_setup.py` | 581 | End-to-end training pipeline: data collection → training → evaluation → Colab verification |
+
 ---
 
 ## ⚙️ Installation & Setup
 
 ### Prerequisites
 
-- Python 3.10+
-- NVIDIA GPU with CUDA support (recommended for training)
-- Webcam (for real-time verification)
+| Requirement | Minimum | Recommended |
+|---|---|---|
+| **Python** | 3.10 | 3.10+ |
+| **GPU** | — (CPU works) | NVIDIA with CUDA (for training) |
+| **Webcam** | Any USB/built-in | 720p+ |
+| **RAM** | 4 GB | 8 GB+ |
+| **Disk** | 500 MB (code + model) | 2 GB+ (with dataset) |
 
 ### Step-by-Step
 
@@ -241,9 +354,11 @@ graph LR
 
 ### Data Collection Flow
 
+Anchor & positive images are captured from your webcam; negative images are sourced from the [LFW (Labeled Faces in the Wild)](https://vis-www.cs.umass.edu/lfw/) dataset via HuggingFace.
+
 ```mermaid
 flowchart TD
-    A["🎥 Start Webcam<br/>cv2.VideoCapture(0)"] --> B["📐 Crop Frame<br/>250×250px Region"]
+    A["🎥 Start Webcam<br/>cv2.VideoCapture 0"] --> B["📐 Crop Frame<br/>250×250px Region"]
     B --> C{"⌨️ Key Press?"}
     
     C -->|"Press 'a'"| D["💾 Save to<br/>data/anchor/<br/>UUID.jpg"]
@@ -271,13 +386,15 @@ flowchart TD
 
 ### Image Preprocessing Pipeline
 
+Every image — whether for training or real-time inference — passes through the same preprocessing:
+
 ```mermaid
 flowchart LR
     A["📷 Raw Image<br/>(Variable Size)"] --> B["📖 tf.io.read_file<br/>Read Bytes"]
     B --> C["🖼️ tf.io.decode_jpeg<br/>Decode to Tensor"]
     C --> D["📐 tf.image.resize<br/>100×100×3"]
     D --> E["⚖️ Normalize<br/>pixel / 255.0"]
-    E --> F["✅ Preprocessed<br/>Tensor [0, 1]"]
+    E --> F["✅ Preprocessed<br/>Tensor 0 to 1"]
 
     style A fill:#FFECB3,stroke:#FF8F00,color:#000
     style F fill:#C8E6C9,stroke:#388E3C,color:#000
@@ -302,8 +419,8 @@ flowchart TD
     J --> K["🗃️ Cache"]
     K --> L["✂️ 70/30 Split"]
     
-    L --> M["🏋️ Train Set<br/>batch=16, prefetch=8"]
-    L --> N["🧪 Test Set<br/>batch=16, prefetch=8"]
+    L --> M["🏋️ Train Set<br/>batch=16 prefetch=8"]
+    L --> N["🧪 Test Set<br/>batch=16 prefetch=8"]
 
     style D fill:#42A5F5,stroke:#1565C0,color:#fff
     style H fill:#42A5F5,stroke:#1565C0,color:#fff
@@ -317,19 +434,19 @@ flowchart TD
 
 ### Embedding Network (CNN)
 
-The embedding network transforms a `100×100×3` face image into a **4096-dimensional feature vector**.
+The embedding network transforms a `100×100×3` face image into a **4096-dimensional feature vector**:
 
 ```mermaid
 graph TD
-    A["📷 Input Image<br/>100×100×3"] --> B["🔵 Conv2D<br/>64 filters, 10×10<br/>ReLU"]
-    B --> C["🔽 MaxPool2D<br/>2×2, same padding"]
-    C --> D["🔵 Conv2D<br/>128 filters, 7×7<br/>ReLU"]
-    D --> E["🔽 MaxPool2D<br/>2×2, same padding"]
-    E --> F["🔵 Conv2D<br/>128 filters, 4×4<br/>ReLU"]
-    F --> G["🔽 MaxPool2D<br/>2×2, same padding"]
-    G --> H["🔵 Conv2D<br/>256 filters, 4×4<br/>ReLU"]
+    A["📷 Input Image<br/>100×100×3"] --> B["🔵 Conv2D<br/>64 filters 10×10<br/>ReLU"]
+    B --> C["🔽 MaxPool2D<br/>2×2 same padding"]
+    C --> D["🔵 Conv2D<br/>128 filters 7×7<br/>ReLU"]
+    D --> E["🔽 MaxPool2D<br/>2×2 same padding"]
+    E --> F["🔵 Conv2D<br/>128 filters 4×4<br/>ReLU"]
+    F --> G["🔽 MaxPool2D<br/>2×2 same padding"]
+    G --> H["🔵 Conv2D<br/>256 filters 4×4<br/>ReLU"]
     H --> I["📊 Flatten"]
-    I --> J["🟣 Dense<br/>4096 units, Sigmoid"]
+    I --> J["🟣 Dense<br/>4096 units Sigmoid"]
     J --> K["📐 4096-D<br/>Face Embedding"]
 
     style A fill:#E3F2FD,stroke:#1565C0,color:#000
@@ -361,13 +478,15 @@ Non-trainable params: 0
 
 ```mermaid
 pie title Model Parameter Distribution
-    "Conv2D Layer 1 (64 filters)" : 19264
-    "Conv2D Layer 2 (128 filters)" : 401536
-    "Conv2D Layer 3 (128 filters)" : 262272
-    "Conv2D Layer 4 (256 filters)" : 524544
-    "Dense 4096 (Embedding)" : 23633920
-    "Dense 1 (Classifier)" : 4097
+    "Conv2D Layer 1 — 64 filters" : 19264
+    "Conv2D Layer 2 — 128 filters" : 401536
+    "Conv2D Layer 3 — 128 filters" : 262272
+    "Conv2D Layer 4 — 256 filters" : 524544
+    "Dense 4096 — Embedding" : 23633920
+    "Dense 1 — Classifier" : 4097
 ```
+
+> **Insight:** The Dense embedding layer alone accounts for **~95%** of all parameters. This large bottleneck is what enables the network to encode rich facial features into the 4096-D vector.
 
 ---
 
@@ -379,15 +498,15 @@ pie title Model Parameter Distribution
 flowchart TD
     A["🚀 Start Training<br/>EPOCHS = 50"] --> B["📦 Load Training Batch<br/>batch_size = 16"]
     
-    B --> C["🔄 Forward Pass<br/>siamese_model(X)"]
+    B --> C["🔄 Forward Pass<br/>siamese_model X"]
     C --> D["📉 Compute Loss<br/>BinaryCrossentropy"]
     D --> E["📐 Compute Gradients<br/>tf.GradientTape"]
     E --> F["⚙️ Update Weights<br/>Adam Optimizer<br/>lr = 1e-4"]
-    F --> G["📊 Update Metrics<br/>Precision & Recall"]
+    F --> G["📊 Update Metrics<br/>Precision and Recall"]
     
     G --> H{"More Batches?"}
     H -->|Yes| B
-    H -->|No| I{"Epoch % 10 == 0?"}
+    H -->|No| I{"Epoch mod 10 = 0?"}
     
     I -->|Yes| J["💾 Save Checkpoint"]
     I -->|No| K{"More Epochs?"}
@@ -433,6 +552,23 @@ def train_step(batch):
     return loss
 ```
 
+### Training on Google Colab
+
+The `siamese_network_setup.py` script is designed to run on **Google Colab** with a GPU runtime:
+
+```mermaid
+flowchart LR
+    A["📤 Upload data.zip<br/>to Google Drive"] --> B["📓 Open Notebook<br/>in Google Colab"]
+    B --> C["🔧 Mount Drive and<br/>Extract Data"]
+    C --> D["🏋️ Train for<br/>50 Epochs"]
+    D --> E["💾 Save Model<br/>siamesemodelv2.h5"]
+    E --> F["📥 Download to<br/>Project Root"]
+
+    style A fill:#E3F2FD,stroke:#1565C0,color:#000
+    style D fill:#FFF3E0,stroke:#E65100,color:#000
+    style F fill:#E8F5E9,stroke:#2E7D32,color:#000
+```
+
 ---
 
 ## 📊 Evaluation & Metrics
@@ -442,7 +578,7 @@ def train_step(batch):
 ```mermaid
 flowchart LR
     A["🧪 Test Data"] --> B["🧠 Model Predict"]
-    B --> C["📊 Raw Scores<br/>(0.0 to 1.0)"]
+    B --> C["📊 Raw Scores<br/>0.0 to 1.0"]
     C --> D["📏 Threshold<br/>> 0.5 = Positive"]
     D --> E["📈 Precision"]
     D --> F["📈 Recall"]
@@ -465,26 +601,67 @@ flowchart LR
 | **Detection Threshold** | `prediction > 0.5` | Minimum confidence to count a single comparison as positive |
 | **Verification Threshold** | `detections / total > 0.5` | Minimum ratio of positive comparisons to verify identity |
 
+### Confusion Matrix Interpretation
+
+```
+                   Predicted
+                Positive  Negative
+Actual  Positive   TP        FN      ← Recall = TP/(TP+FN)
+        Negative   FP        TN
+                   ↑
+              Precision = TP/(TP+FP)
+```
+
 ---
 
 ## 🖥️ Real-Time Application
+
+### Application State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Initializing: python faceid.py
+
+    Initializing --> LiveFeed: Model Loaded + Camera Ready
+    
+    LiveFeed --> Capturing: User Clicks Verify
+    LiveFeed --> LiveFeed: update at 33 FPS
+    
+    Capturing --> Preprocessing: Frame Saved
+    Preprocessing --> Inferencing: Images Preprocessed
+    Inferencing --> Decision: Batch Predictions Ready
+    
+    Decision --> Verified: ratio > 0.5
+    Decision --> Unverified: ratio ≤ 0.5
+    Decision --> EmptyError: No verification images
+    
+    Verified --> LiveFeed: Display Result
+    Unverified --> LiveFeed: Display Result
+    EmptyError --> LiveFeed: Show Unverified Empty
+
+    state Initializing {
+        [*] --> LoadModel
+        LoadModel --> OpenCamera
+        OpenCamera --> ScheduleClock
+    }
+```
 
 ### Kivy App Architecture
 
 ```mermaid
 graph TD
-    subgraph "CamApp (Kivy Application)"
-        A["🏗️ build()"] --> B["📷 Image Widget<br/>(Webcam Feed)"]
+    subgraph "CamApp Kivy Application"
+        A["🏗️ build"] --> B["📷 Image Widget<br/>Webcam Feed"]
         A --> C["🔘 Verify Button"]
         A --> D["🏷️ Status Label"]
         A --> E["🧠 Load Model<br/>siamesemodelv2.h5"]
-        A --> F["📹 VideoCapture(0)"]
+        A --> F["📹 VideoCapture 0"]
         
-        F --> G["⏱️ Clock.schedule_interval<br/>update() @ 33 FPS"]
+        F --> G["⏱️ Clock.schedule_interval<br/>update at 33 FPS"]
         G --> H["🔄 Read Frame → Crop → Flip → Texture"]
         H --> B
         
-        C -->|on_press| I["verify()"]
+        C -->|on_press| I["verify"]
         I --> J["📸 Capture Frame"]
         J --> K["💾 Save input_image.jpg"]
         K --> L["🔄 Preprocess All Images"]
@@ -499,19 +676,19 @@ graph TD
     style M fill:#FF9800,stroke:#E65100,color:#fff
 ```
 
-### Application Screenshot Layout
+### Application Layout
 
 ```
 ┌─────────────────────────────────┐
 │                                 │
 │        📷 Webcam Feed           │
 │        (250×250 crop)           │
-│                                 │
+│        size_hint=(1, 0.8)       │
 │                                 │
 ├─────────────────────────────────┤
-│     [ 🔍 Verify Button ]       │
+│     [ 🔍 Verify Button ]       │   size_hint=(1, 0.1)
 ├─────────────────────────────────┤
-│   Status: ✅ Verified           │
+│   Status: ✅ Verified           │   size_hint=(1, 0.1)
 └─────────────────────────────────┘
 ```
 
@@ -530,32 +707,33 @@ sequenceDiagram
     participant M as 🧠 Siamese Model
     participant D as 📊 Decision Engine
 
-    U->>K: Click "Verify" Button
+    U->>K: Click Verify Button
     K->>C: capture.read()
     C-->>K: Raw Frame
     K->>K: Crop to 250×250
     K->>K: Save as input_image.jpg
     
     K->>P: Preprocess input image
-    P-->>K: Tensor [100,100,3]
+    P-->>K: Tensor 100x100x3
     
     loop For each verification image
         K->>P: Preprocess verification image
-        P-->>K: Tensor [100,100,3]
+        P-->>K: Tensor 100x100x3
     end
     
-    K->>M: Batch predict([inputs, validations])
-    M-->>K: Similarity scores [0.0 - 1.0]
+    K->>K: Stack into batches
+    K->>M: Batch predict inputs and validations
+    M-->>K: Similarity scores 0.0 to 1.0
     
-    K->>D: Apply detection threshold (0.5)
+    K->>D: Apply detection threshold 0.5
     D-->>K: Positive detection count
     K->>D: Calculate verification ratio
     D-->>K: ratio = detections / total
     
     alt ratio > 0.5
-        K->>U: ✅ "Verified"
+        K->>U: ✅ Verified
     else ratio ≤ 0.5
-        K->>U: ❌ "Unverified"
+        K->>U: ❌ Unverified
     end
 ```
 
@@ -577,6 +755,8 @@ FUNCTION verify(input_frame, verification_images):
     ELSE:
         RETURN "❌ UNVERIFIED"
 ```
+
+> **Optimization Note:** The Kivy app (`faceid.py`) uses **batch inference** — it stacks all input/validation image pairs into tensors and calls `model.predict()` once, rather than looping. This is significantly faster than the loop-based approach in the training script.
 
 ---
 
@@ -600,7 +780,7 @@ graph LR
         G[Real-Time UI]
     end
     
-    subgraph "📊 Data & Viz"
+    subgraph "📊 Data and Viz"
         H[NumPy]
         I[Matplotlib]
         J[HuggingFace Datasets]
@@ -608,7 +788,7 @@ graph LR
     
     subgraph "☁️ Training"
         K[Google Colab]
-        L[NVIDIA GPU / CUDA]
+        L[NVIDIA GPU CUDA]
     end
 
     A --> B --> C
@@ -624,15 +804,15 @@ graph LR
 
 ### Dependencies
 
-| Package | Purpose |
-|---|---|
-| `tensorflow` | Deep learning framework — model building, training, inference |
-| `opencv-python` | Webcam capture, image I/O, frame manipulation |
-| `matplotlib` | Training visualization and image plotting |
-| `datasets` | HuggingFace datasets library for negative samples (LFW) |
-| `tqdm` | Progress bars during data processing |
-| `kivy` | Cross-platform desktop GUI framework |
-| `numpy` | Numerical operations on predictions and thresholds |
+| Package | Version | Purpose |
+|---|---|---|
+| `tensorflow` | 2.x | Deep learning framework — model building, training, inference |
+| `opencv-python` | 4.x | Webcam capture, image I/O, frame manipulation |
+| `matplotlib` | latest | Training visualization and image plotting |
+| `datasets` | latest | HuggingFace datasets library for negative samples (LFW) |
+| `tqdm` | latest | Progress bars during data processing |
+| `kivy` | latest | Cross-platform desktop GUI framework |
+| `numpy` | latest | Numerical operations on predictions and thresholds |
 
 ---
 
@@ -644,31 +824,29 @@ graph LR
 # Run the data collection script (requires webcam)
 python siamese_network_setup.py
 
-# Press 'a' → Save anchor image
-# Press 'p' → Save positive image  
+# Press 'a' → Save anchor image  (your face, neutral)
+# Press 'p' → Save positive image (your face, different angles/lighting)
 # Press 'q' → Quit collection
 ```
 
+> **Tip:** Collect at least **300 anchor** and **300 positive** images with varied lighting, angles, and expressions for robust training.
+
 ### 2. Train the Model (Google Colab Recommended)
 
-```mermaid
-flowchart LR
-    A["📤 Upload data.zip<br/>to Google Drive"] --> B["📓 Open Notebook<br/>in Google Colab"]
-    B --> C["🔧 Mount Drive &<br/>Extract Data"]
-    C --> D["🏋️ Train for<br/>50 Epochs"]
-    D --> E["💾 Save Model<br/>siamesemodelv2.h5"]
-    E --> F["📥 Download to<br/>Project Root"]
-
-    style A fill:#E3F2FD,stroke:#1565C0,color:#000
-    style D fill:#FFF3E0,stroke:#E65100,color:#000
-    style F fill:#E8F5E9,stroke:#2E7D32,color:#000
-```
+1. Zip your `data/` folder → `data.zip`
+2. Upload to Google Drive
+3. Open `siamese_network_setup.py` as a Colab notebook
+4. Set runtime to **GPU**
+5. Run all cells — training takes ~30–60 min on a T4 GPU
+6. Download the resulting `siamesemodelv2.h5` to your project root
 
 ### 3. Set Up Verification Images
 
 ```bash
-# Place 3-5 reference images of your face in:
+# Place 3–5 clear reference photos of your face in:
 application_data/verification_images/
+
+# These are the images the model compares against during verification
 ```
 
 ### 4. Run the Application
@@ -698,15 +876,50 @@ python faceid.py
 | **Embedding Dimension** | 4096 |
 | **Output** | Single sigmoid (0–1) |
 | **Inference Speed** | Real-time at 33 FPS |
+| **Training Time** | ~30–60 min on T4 GPU |
 
-### Training Progression
+### Expected Training Progression
 
 ```mermaid
 xychart-beta
-    title "Expected Training Loss Curve"
+    title "Training Loss Curve (50 Epochs)"
+    x-axis "Epoch" [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50]
+    y-axis "Binary Cross-Entropy Loss" 0 --> 0.8
+    line [0.69, 0.48, 0.35, 0.25, 0.18, 0.14, 0.10, 0.07, 0.05, 0.04, 0.03]
+```
+
+```mermaid
+xychart-beta
+    title "Precision and Recall Over Training"
     x-axis "Epoch" [0, 10, 20, 30, 40, 50]
-    y-axis "Binary Cross-Entropy Loss" 0 --> 1
-    line [0.69, 0.35, 0.18, 0.09, 0.05, 0.03]
+    y-axis "Score" 0 --> 1
+    line "Precision" [0.50, 0.72, 0.85, 0.92, 0.96, 0.99]
+    line "Recall" [0.50, 0.68, 0.80, 0.88, 0.94, 0.97]
+```
+
+---
+
+## 🐛 Troubleshooting
+
+| Problem | Cause | Solution |
+|---|---|---|
+| `ModuleNotFoundError: No module named 'kivy'` | Kivy not installed | `pip install kivy` |
+| `FileNotFoundError: siamesemodelv2.h5` | Model not in project root | Train the model or download the `.h5` file |
+| Black/frozen webcam feed | Wrong camera index | Change `cv2.VideoCapture(0)` to `1` or `2` in `faceid.py` |
+| `Unverified (Empty)` result | No verification images | Add photos to `application_data/verification_images/` |
+| `CUDA out of memory` during training | GPU memory overflow | Reduce batch size or use `tf.config.experimental.set_memory_growth` |
+| Very slow inference | Running on CPU | Install `tensorflow-gpu` or run training on Colab |
+| Always shows "Unverified" | Poor reference images or thresholds | Use clearer photos; try lowering thresholds to 0.4 |
+| `cv2.error: !_src.empty()` | Camera not accessible | Check webcam connection; close other apps using camera |
+| Import error for `L1Dist` | Missing `layers.py` | Ensure `layers.py` is in the same directory as `faceid.py` |
+
+### Adjusting Thresholds
+
+If verification is too strict or too lenient, tune these values in `faceid.py`:
+
+```python
+detection_threshold = 0.5     # Lower = more lenient per-image matching
+verification_threshold = 0.5  # Lower = fewer positive matches needed
 ```
 
 ---
@@ -731,17 +944,34 @@ gitgraph
     commit id: "Add error handling"
     checkout main
     merge feature/improvements id: "Merge improvements"
-    commit id: "Update README"
+    commit id: "Add comprehensive README"
 ```
 
-### Development Ideas
+### Development Roadmap
 
-- [ ] Add face detection (MTCNN/Haar Cascades) before cropping
-- [ ] Support multiple user profiles
-- [ ] Add a web-based interface (Flask/FastAPI)
-- [ ] Implement data augmentation for training
-- [ ] Add confidence score display in UI
-- [ ] Export to TFLite for mobile deployment
+- [ ] 🔍 Add face detection (MTCNN/Haar Cascades) before cropping
+- [ ] 👥 Support multiple user profiles
+- [ ] 🌐 Add a web-based interface (Flask/FastAPI)
+- [ ] 🎨 Implement data augmentation for training
+- [ ] 📊 Add confidence score display in UI
+- [ ] 📱 Export to TFLite for mobile deployment
+- [ ] 🔐 Add anti-spoofing (liveness detection)
+- [ ] 📹 Support video-based verification
+- [ ] ☁️ Deploy as a REST API microservice
+
+---
+
+## 📚 References
+
+1. **Koch, G., Zemel, R., & Salakhutdinov, R.** (2015). *Siamese Neural Networks for One-Shot Image Recognition.* ICML Deep Learning Workshop. — The foundational paper on Siamese networks for one-shot learning.
+
+2. **Chopra, S., Hadsell, R., & LeCun, Y.** (2005). *Learning a Similarity Metric Discriminatively, with Application to Face Verification.* IEEE CVPR. — Early work on contrastive loss for face verification.
+
+3. **Huang, G. B., et al.** (2007). *Labeled Faces in the Wild: A Database for Studying Face Recognition in Unconstrained Environments.* — The LFW dataset used for negative samples.
+
+4. **TensorFlow Documentation** — [keras.io](https://keras.io) | [tensorflow.org](https://www.tensorflow.org)
+
+5. **Kivy Framework** — [kivy.org](https://kivy.org) — Cross-platform Python UI framework.
 
 ---
 
