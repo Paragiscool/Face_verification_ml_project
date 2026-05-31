@@ -407,12 +407,12 @@ plt.imshow(test_val[0])
 plt.show()
 
 # Save weights
-siamese_model.save('siamesemodelv2.h5')
+siamese_model.save('siamesemodelv3.h5')
 
 L1Dist
 
 # Reload model
-siamese_model = tf.keras.models.load_model('siamesemodelv2.h5',
+siamese_model = tf.keras.models.load_model('siamesemodelv3.h5',
                                    custom_objects={'L1Dist':L1Dist, 'BinaryCrossentropy':tf.losses.BinaryCrossentropy})
 
 # Make predictions with reloaded model

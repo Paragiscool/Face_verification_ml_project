@@ -6,6 +6,7 @@ import tensorflow as tf
 from tensorflow.keras.layers import Layer
 
 # Custom L1 Distance Layer from Jupyter 
+@tf.keras.utils.register_keras_serializable(package='Custom')
 class L1Dist(Layer):
     
     # Init method - inheritance
